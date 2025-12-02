@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pico Car HUD – WebSerial Sync</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* CSS styles here */
+    body {
+      background: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    .hud-container {
+      margin: auto;
+      padding: 20px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      max-width: 400px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud-container">
+    <h1>Pico Car HUD</h1>
+    <p>Status: <span id="status">Not connected</span></p>
+    <button id="connect-btn">Connect to Pico</button>
+  </div>
+
+  <script>
+    // JavaScript for WebSerial connection
+    const connectButton = document.getElementById('connect-btn');
+    const statusText = document.getElementById('status');
+
+    connectButton.addEventListener('click', async () => {
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        statusText.textContent = 'Connected!';
+      } catch (error) {
+        console.error('Connection error:', error);
+        statusText.textContent = 'Failed to connect.';
+      }
+    });
+  </script>
+</body>
+</html>
