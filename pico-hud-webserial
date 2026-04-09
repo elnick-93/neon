@@ -2,53 +2,579 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pico Car HUD – WebSerial Sync</title>
+  <title>Pico Car HUD – WebSerial Console</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    /* CSS styles here */
+    :root {
+      color-scheme: dark;
+      --bg: #0a1021;
+      --panel: #101a36;
+      --panel-muted: #0f1730;
+      --border: #2a3866;
+      --text: #e9efff;
+      --muted: #9daedc;
+      --accent: #57b4ff;
+      --success: #29d48d;
+      --warning: #ffc75f;
+      --danger: #ff7c8c;
+      --chip: #1a2547;
+      --log: #090f20;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
-      background: #111;
-      color: #eee;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 50px;
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 15% -10%, #21346d 0, var(--bg) 45%);
+      padding: 18px;
     }
-    .hud-container {
-      margin: auto;
-      padding: 20px;
-      border: 1px solid #444;
-      border-radius: 8px;
-      max-width: 400px;
+
+    .app {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
     }
+
+    .panel {
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 95%, black), var(--panel-muted));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgb(0 0 0 / 30%);
+    }
+
+    .header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      letter-spacing: 0.01em;
+    }
+
+    .subtitle {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid color-mix(in srgb, var(--border) 78%, white);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgb(255 255 255 / 4%);
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--warning);
+      box-shadow: 0 0 0 4px rgb(255 199 95 / 18%);
+    }
+
+    .dot.connected {
+      background: var(--success);
+      box-shadow: 0 0 0 4px rgb(41 212 141 / 20%);
+    }
+
+    .dot.error {
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgb(255 124 140 / 20%);
+    }
+
+    .controls-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    select,
     button {
-      padding: 10px 20px;
-      font-size: 16px;
+      border-radius: 10px;
+      border: 1px solid rgb(255 255 255 / 12%);
+      font-size: 0.9rem;
+      padding: 9px 11px;
+      color: var(--text);
+      background: rgb(255 255 255 / 6%);
+    }
+
+    select { min-width: 120px; }
+
+    button {
       cursor: pointer;
+      font-weight: 600;
+      transition: transform 110ms ease, opacity 110ms ease;
+    }
+
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .primary {
+      border: none;
+      color: #071122;
+      background: linear-gradient(180deg, #86cfff, var(--accent));
+    }
+
+    .danger { border-color: color-mix(in srgb, var(--danger) 55%, white); }
+    .chip {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      background: var(--chip);
+      color: var(--muted);
+      border: 1px solid color-mix(in srgb, var(--border) 75%, white);
+    }
+
+    .telemetry {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+    }
+
+    .card {
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid rgb(255 255 255 / 10%);
+      background: rgb(255 255 255 / 3%);
+    }
+
+    .card-label {
+      margin: 0;
+      font-size: 0.76rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .card-value {
+      margin: 6px 0 0;
+      font-size: 1.28rem;
+      font-weight: 700;
+    }
+
+    .card-unit { color: var(--muted); font-size: 0.86rem; margin-left: 4px; }
+
+    .main-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1.2fr 1fr;
+    }
+
+    .log {
+      margin: 0;
+      height: 320px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.35;
+      border-radius: 12px;
+      background: var(--log);
+      border: 1px solid rgb(255 255 255 / 10%);
+      padding: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .kv {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+
+    .kv .card-value {
+      font-size: 1rem;
+      margin-top: 2px;
+    }
+
+    @media (max-width: 900px) {
+      .telemetry { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .telemetry,
+      .kv { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
     }
   </style>
 </head>
 <body>
-  <div class="hud-container">
-    <h1>Pico Car HUD</h1>
-    <p>Status: <span id="status">Not connected</span></p>
-    <button id="connect-btn">Connect to Pico</button>
-  </div>
+  <main class="app" aria-live="polite">
+    <section class="panel">
+      <div class="header">
+        <div>
+          <h1>Pico Car HUD</h1>
+          <p class="subtitle">Connect your Pico and monitor live telemetry with actionable controls.</p>
+        </div>
+        <div id="status-pill" class="status">
+          <span id="status-dot" class="dot" aria-hidden="true"></span>
+          <span id="status-text">Not connected</span>
+        </div>
+      </div>
+
+      <div class="controls-grid" style="margin-top: 12px;">
+        <div class="row">
+          <label for="baud-rate">Baud rate</label>
+          <select id="baud-rate">
+            <option>9600</option>
+            <option>19200</option>
+            <option selected>115200</option>
+            <option>230400</option>
+          </select>
+          <button id="connect-btn" class="primary" type="button">Connect</button>
+          <button id="disconnect-btn" class="danger" type="button" disabled>Disconnect</button>
+          <button id="stream-btn" type="button" disabled>Start stream</button>
+          <button id="clear-log-btn" type="button">Clear log</button>
+          <button id="export-log-btn" type="button">Export log</button>
+        </div>
+        <div class="row">
+          <span class="chip" id="port-chip">Port: none</span>
+          <span class="chip" id="rx-chip">Lines RX: 0</span>
+          <span class="chip" id="stream-chip">Stream: stopped</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="telemetry">
+        <article class="card">
+          <p class="card-label">Speed</p>
+          <p class="card-value"><span id="speed">0</span><span class="card-unit">km/h</span></p>
+        </article>
+        <article class="card">
+          <p class="card-label">RPM</p>
+          <p class="card-value"><span id="rpm">0</span></p>
+        </article>
+        <article class="card">
+          <p class="card-label">Coolant Temp</p>
+          <p class="card-value"><span id="temp">0</span><span class="card-unit">°C</span></p>
+        </article>
+        <article class="card">
+          <p class="card-label">Battery</p>
+          <p class="card-value"><span id="voltage">0.0</span><span class="card-unit">V</span></p>
+        </article>
+        <article class="card">
+          <p class="card-label">Mode</p>
+          <p class="card-value" id="mode">Idle</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <article class="panel">
+        <h2 style="margin-top: 0; font-size: 1.02rem;">Serial Log</h2>
+        <pre id="serial-log" class="log">[System] Ready. Connect to your Pico to begin.</pre>
+      </article>
+
+      <article class="panel">
+        <h2 style="margin-top: 0; font-size: 1.02rem;">Session Details</h2>
+        <div class="kv">
+          <article class="card">
+            <p class="card-label">Last Packet</p>
+            <p class="card-value" id="last-packet">—</p>
+          </article>
+          <article class="card">
+            <p class="card-label">Last Update</p>
+            <p class="card-value" id="last-update">—</p>
+          </article>
+          <article class="card">
+            <p class="card-label">Parse Errors</p>
+            <p class="card-value" id="parse-errors">0</p>
+          </article>
+          <article class="card">
+            <p class="card-label">Connection</p>
+            <p class="card-value" id="conn-state">Offline</p>
+          </article>
+        </div>
+        <p id="help-text" class="help" style="margin-top: 10px;">
+          Tip: Expected packet formats are JSON (e.g. {"speed":42}) or key/value pairs like <code>speed=42,rpm=3200,temp=88,voltage=12.3,mode=drive</code>.
+        </p>
+      </article>
+    </section>
+  </main>
 
   <script>
-    // JavaScript for WebSerial connection
-    const connectButton = document.getElementById('connect-btn');
-    const statusText = document.getElementById('status');
+    const ui = {
+      connectBtn: document.getElementById('connect-btn'),
+      disconnectBtn: document.getElementById('disconnect-btn'),
+      streamBtn: document.getElementById('stream-btn'),
+      clearLogBtn: document.getElementById('clear-log-btn'),
+      exportLogBtn: document.getElementById('export-log-btn'),
+      baudRate: document.getElementById('baud-rate'),
+      statusDot: document.getElementById('status-dot'),
+      statusText: document.getElementById('status-text'),
+      helpText: document.getElementById('help-text'),
+      portChip: document.getElementById('port-chip'),
+      rxChip: document.getElementById('rx-chip'),
+      streamChip: document.getElementById('stream-chip'),
+      serialLog: document.getElementById('serial-log'),
+      speed: document.getElementById('speed'),
+      rpm: document.getElementById('rpm'),
+      temp: document.getElementById('temp'),
+      voltage: document.getElementById('voltage'),
+      mode: document.getElementById('mode'),
+      lastPacket: document.getElementById('last-packet'),
+      lastUpdate: document.getElementById('last-update'),
+      parseErrors: document.getElementById('parse-errors'),
+      connState: document.getElementById('conn-state')
+    };
 
-    connectButton.addEventListener('click', async () => {
-      try {
-        const port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 9600 });
-        statusText.textContent = 'Connected!';
-      } catch (error) {
-        console.error('Connection error:', error);
-        statusText.textContent = 'Failed to connect.';
+    const state = {
+      port: null,
+      reader: null,
+      keepReading: false,
+      linesRx: 0,
+      parseErrors: 0,
+      maxLogLength: 6000
+    };
+
+    const setStatus = (kind, message) => {
+      ui.statusText.textContent = message;
+      ui.statusDot.classList.remove('connected', 'error');
+      if (kind === 'connected') ui.statusDot.classList.add('connected');
+      if (kind === 'error') ui.statusDot.classList.add('error');
+      ui.connState.textContent = kind === 'connected' ? 'Online' : kind === 'error' ? 'Error' : 'Offline';
+    };
+
+    const setUiConnected = (isConnected) => {
+      ui.connectBtn.disabled = isConnected;
+      ui.disconnectBtn.disabled = !isConnected;
+      ui.streamBtn.disabled = !isConnected;
+    };
+
+    const appendLog = (line) => {
+      const now = new Date().toLocaleTimeString();
+      ui.serialLog.textContent += `\n[${now}] ${line}`;
+
+      if (ui.serialLog.textContent.length > state.maxLogLength) {
+        ui.serialLog.textContent = ui.serialLog.textContent.slice(-state.maxLogLength);
       }
+
+      ui.serialLog.scrollTop = ui.serialLog.scrollHeight;
+    };
+
+    const updateTelemetry = (packet) => {
+      if (packet.speed != null) ui.speed.textContent = Number(packet.speed).toFixed(0);
+      if (packet.rpm != null) ui.rpm.textContent = Number(packet.rpm).toFixed(0);
+      if (packet.temp != null) ui.temp.textContent = Number(packet.temp).toFixed(0);
+      if (packet.voltage != null) ui.voltage.textContent = Number(packet.voltage).toFixed(1);
+      if (packet.mode != null) ui.mode.textContent = String(packet.mode);
+
+      ui.lastPacket.textContent = Object.keys(packet).join(', ') || '—';
+      ui.lastUpdate.textContent = new Date().toLocaleTimeString();
+    };
+
+    const parseLine = (line) => {
+      const raw = line.trim();
+      if (!raw) return null;
+
+      try {
+        if (raw.startsWith('{')) {
+          return JSON.parse(raw);
+        }
+
+        const packet = {};
+        const fields = raw.split(',');
+        for (const field of fields) {
+          const [key, value] = field.split('=');
+          if (!key || value == null) continue;
+          const num = Number(value);
+          packet[key.trim()] = Number.isNaN(num) ? value.trim() : num;
+        }
+
+        return Object.keys(packet).length ? packet : null;
+      } catch (error) {
+        state.parseErrors += 1;
+        ui.parseErrors.textContent = String(state.parseErrors);
+        appendLog(`[ParseError] ${error.message}`);
+        return null;
+      }
+    };
+
+    const stopReader = async () => {
+      state.keepReading = false;
+      if (state.reader) {
+        try {
+          await state.reader.cancel();
+        } catch (error) {
+          appendLog(`[Warn] Reader cancel failed: ${error.message}`);
+        }
+        state.reader = null;
+      }
+    };
+
+    const readLoop = async () => {
+      if (!state.port?.readable) {
+        appendLog('[Warn] Port is not readable.');
+        return;
+      }
+
+      state.keepReading = true;
+      const decoder = new TextDecoderStream();
+      const streamClosed = state.port.readable.pipeTo(decoder.writable);
+      state.reader = decoder.readable.getReader();
+      let buffered = '';
+
+      appendLog('[System] Stream started.');
+
+      try {
+        while (state.keepReading) {
+          const { value, done } = await state.reader.read();
+          if (done) break;
+
+          buffered += value;
+          const lines = buffered.split(/\r?\n/);
+          buffered = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            state.linesRx += 1;
+            ui.rxChip.textContent = `Lines RX: ${state.linesRx}`;
+            appendLog(`[RX] ${line}`);
+
+            const parsed = parseLine(line);
+            if (parsed) {
+              updateTelemetry(parsed);
+            }
+          }
+        }
+      } catch (error) {
+        appendLog(`[Error] Stream read failed: ${error.message}`);
+        setStatus('error', 'Read error');
+      } finally {
+        try { state.reader.releaseLock(); } catch (_) {}
+        streamClosed.catch(() => {});
+        state.reader = null;
+        state.keepReading = false;
+        ui.streamBtn.textContent = 'Start stream';
+        ui.streamChip.textContent = 'Stream: stopped';
+      }
+    };
+
+    const connect = async () => {
+      setStatus('idle', 'Awaiting device');
+
+      try {
+        state.port = await navigator.serial.requestPort();
+        const baudRate = Number(ui.baudRate.value);
+        await state.port.open({ baudRate });
+
+        setUiConnected(true);
+        setStatus('connected', 'Connected');
+        ui.portChip.textContent = 'Port: connected';
+        ui.helpText.textContent = 'Connected. Start stream to read telemetry packets from your Pico.';
+        appendLog(`[System] Port opened at ${baudRate} baud.`);
+
+        state.port.addEventListener('disconnect', async () => {
+          appendLog('[System] Device disconnected.');
+          await disconnect(true);
+          setStatus('error', 'Device disconnected');
+        });
+      } catch (error) {
+        const canceled = error?.name === 'NotFoundError';
+        setStatus('error', canceled ? 'No device selected' : 'Connection failed');
+        ui.helpText.textContent = canceled
+          ? 'Connection canceled. Click connect and select your Pico device.'
+          : 'Connection failed. Ensure your Pico is attached and not opened by another app.';
+        appendLog(`[Error] ${error.message}`);
+      }
+    };
+
+    const disconnect = async (fromEvent = false) => {
+      await stopReader();
+
+      if (state.port && !fromEvent) {
+        try {
+          await state.port.close();
+          appendLog('[System] Port closed.');
+        } catch (error) {
+          appendLog(`[Warn] Close failed: ${error.message}`);
+        }
+      }
+
+      state.port = null;
+      setUiConnected(false);
+      setStatus('idle', 'Not connected');
+      ui.portChip.textContent = 'Port: none';
+      ui.streamChip.textContent = 'Stream: stopped';
+      ui.helpText.textContent = 'Disconnected. Connect your Pico and start stream when ready.';
+    };
+
+    const toggleStream = async () => {
+      if (!state.port) return;
+
+      if (state.keepReading) {
+        await stopReader();
+        ui.streamBtn.textContent = 'Start stream';
+        ui.streamChip.textContent = 'Stream: stopped';
+        appendLog('[System] Stream stopped.');
+        return;
+      }
+
+      ui.streamBtn.textContent = 'Stop stream';
+      ui.streamChip.textContent = 'Stream: running';
+      readLoop();
+    };
+
+    const exportLog = () => {
+      const blob = new Blob([ui.serialLog.textContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pico-hud-log-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    ui.connectBtn.addEventListener('click', connect);
+    ui.disconnectBtn.addEventListener('click', () => disconnect(false));
+    ui.streamBtn.addEventListener('click', toggleStream);
+    ui.clearLogBtn.addEventListener('click', () => {
+      ui.serialLog.textContent = '[System] Log cleared.';
+      state.linesRx = 0;
+      ui.rxChip.textContent = 'Lines RX: 0';
     });
+    ui.exportLogBtn.addEventListener('click', exportLog);
+
+    if (!('serial' in navigator)) {
+      setStatus('error', 'WebSerial unsupported');
+      ui.connectBtn.disabled = true;
+      ui.helpText.textContent = 'This browser does not support WebSerial. Use Chrome, Edge, or another Chromium browser.';
+      appendLog('[Error] WebSerial API is unavailable in this browser.');
+    }
   </script>
 </body>
 </html>
