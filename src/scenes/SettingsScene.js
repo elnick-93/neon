@@ -47,16 +47,22 @@ export class SettingsScene extends Phaser.Scene {
       this.time.delayedCall(1500, () => restoreBtn.setColor('#334466'));
     });
 
+    // Notifications toggle
+    y = this._toggle(width, y + lineH, 'NOTIFICATIONS', this._settings.notifications ?? true, (v) => {
+      this._settings.notifications = v;
+      storageService.saveSettings(this._settings);
+    });
+
     // Version info
-    this.add.text(width / 2, height * 0.9, 'v1.0.0 — Neon Block Raid', {
+    this.add.text(width / 2, height * 0.9, 'v1.0.0 — Lumipet', {
       fontSize: '11px', fontFamily: 'monospace', color: '#222244',
     }).setOrigin(0.5);
 
     // Back
     const back = this.add.text(20, 20, '< BACK', {
-      fontSize: '14px', fontFamily: 'monospace', color: '#445566',
+      fontSize: '14px', fontFamily: 'monospace', color: '#4a3a6a',
     }).setInteractive({ useHandCursor: true });
-    back.on('pointerup', () => this.scene.start('MainMenuScene'));
+    back.on('pointerup', () => this.scene.start('MainScene'));
   }
 
   _slider(width, y, label, value, onChange) {

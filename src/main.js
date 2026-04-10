@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene.js';
-import { MainMenuScene } from './scenes/MainMenuScene.js';
-import { GameScene } from './scenes/GameScene.js';
-import { CardSelectScene } from './scenes/CardSelectScene.js';
-import { RunCompleteScene } from './scenes/RunCompleteScene.js';
+import { PaywallScene } from './scenes/PaywallScene.js';
+import { NewPetScene } from './scenes/NewPetScene.js';
+import { MainScene } from './scenes/MainScene.js';
+import { FeedScene } from './scenes/FeedScene.js';
+import { PlayScene } from './scenes/PlayScene.js';
+import { EvolutionScene } from './scenes/EvolutionScene.js';
+import { StatsScene } from './scenes/StatsScene.js';
+import { DeathScene } from './scenes/DeathScene.js';
 import { ShopScene } from './scenes/ShopScene.js';
 import { SettingsScene } from './scenes/SettingsScene.js';
-import { PaywallScene } from './scenes/PaywallScene.js';
 import { COLOR_BG } from './constants.js';
 
 // Make Phaser globally available for scenes that reference it directly
@@ -17,13 +20,16 @@ const config = {
   backgroundColor: COLOR_BG,
   scene: [
     BootScene,
-    MainMenuScene,
-    GameScene,
-    CardSelectScene,
-    RunCompleteScene,
+    PaywallScene,
+    NewPetScene,
+    MainScene,
+    FeedScene,
+    PlayScene,
+    EvolutionScene,
+    StatsScene,
+    DeathScene,
     ShopScene,
     SettingsScene,
-    PaywallScene,
   ],
   scale: {
     mode: Phaser.Scale.FIT,
@@ -32,20 +38,13 @@ const config = {
     height: 844,
     parent: document.body,
   },
-  physics: {
-    default: 'arcade',
-    arcade: { gravity: { y: 0 }, debug: false },
-  },
   input: {
     activePointers: 2,  // support multi-touch
   },
-  audio: {
-    disableWebAudio: false,
-  },
   render: {
-    antialias: true,
-    pixelArt: false,
-    roundPixels: false,
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true,
   },
 };
 

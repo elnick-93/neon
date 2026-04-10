@@ -1,23 +1,24 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.neonblockraid.app',
-  appName: 'Neon Block Raid',
+  appId: 'com.lumipet.app',
+  appName: 'Lumipet',
   webDir: 'dist',
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#0a0a0f',
-      showSpinner: false
+      backgroundColor: '#1a0e2e',
+      showSpinner: false,
     },
     StatusBar: {
       style: 'DARK',
-      backgroundColor: '#0a0a0f'
+      backgroundColor: '#1a0e2e',
     },
-    Keyboard: {
-      resize: 'none'
-    }
-  }
+    LocalNotifications: {
+      smallIcon: 'ic_lumipet_notif',
+      iconColor: '#f9a8d4',
+    },
+  },
 };
 
 export default config;

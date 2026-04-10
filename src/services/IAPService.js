@@ -1,16 +1,12 @@
-import { REVENUECAT_IOS_KEY, REVENUECAT_ANDROID_KEY, IAP_PRODUCTS } from '../constants.js';
+import { REVENUECAT_IOS_KEY, REVENUECAT_ANDROID_KEY } from '../constants.js';
 import { IAP_BY_ID } from '../data/iap.js';
 import { storageService } from './StorageService.js';
+import { ACCESSORIES } from '../data/accessories.js';
 
-/**
- * IAPService — wraps RevenueCat's purchases-capacitor SDK.
- * Falls back to storageService entitlements if SDK unavailable.
- */
 class IAPService {
   constructor() {
-    this._sdk = null;
-    this._customerInfo = null;
-    this._ready = false;
+    this._Purchases = null;
+    this._ready     = false;
     this._listeners = [];
   }
 
@@ -18,58 +14,43 @@ class IAPService {
     try {
       const { Purchases, LOG_LEVEL } = await import('@revenuecat/purchases-capacitor');
       this._Purchases = Purchases;
-
       const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      const apiKey = isIOS ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY;
-
       await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG });
-      await Purchases.configure({ apiKey, appUserID: uid });
-
-      if (uid) {
-        await Purchases.logIn({ appUserID: uid });
-      }
-
-      this._customerInfo = await Purchases.getCustomerInfo();
-      this._syncEntitlements(this._customerInfo.customerInfo);
+      await Purchases.configure({ apiKey: isIOS ? REVENUECAT_IOS_KEY : REVENUECAT_ANDROID_KEY, appUserID: uid });
+      if (uid) await Purchases.logIn({ appUserID: uid });
+      const { customerInfo } = await Purchases.getCustomerInfo();
+      this._syncEntitlements(customerInfo);
       this._ready = true;
     } catch (err) {
-      // SDK not available (web browser / dev mode) — use localStorage entitlements only
-      console.warn('[IAPService] RevenueCat unavailable:', err.message);
+      console.info('[IAPService] RevenueCat unavailable (dev mode):', err.message);
       this._ready = true;
     }
   }
 
-  /** Synchronous entitlement check (uses localStorage cache) */
   hasEntitlement(key) {
     return storageService.hasEntitlement(key);
   }
 
-  /** Purchase a product by its catalogue ID */
   async purchase(productId) {
     const def = IAP_BY_ID[productId];
     if (!def) throw new Error(`Unknown product: ${productId}`);
 
     if (!this._Purchases) {
-      // Dev mode: simulate purchase
-      this._grantProduct(def);
+      // Dev simulation
+      this._grantDef(def);
       return { success: true, simulated: true };
     }
 
     try {
-      const { customerInfo } = await this._Purchases.purchaseStoreProduct({
-        product: await this._getStoreProduct(productId),
-      });
+      const products = await this._Purchases.getProducts({ productIdentifiers: [productId] });
+      const { customerInfo } = await this._Purchases.purchaseStoreProduct({ product: products.products[0] });
       this._syncEntitlements(customerInfo);
+      this._grantConsumable(def);  // consumables aren't in entitlements
       return { success: true };
     } catch (err) {
-      if (err.code === 1) return { success: false, cancelled: true }; // user cancelled
+      if (err.code === 1) return { success: false, cancelled: true };
       throw err;
     }
-  }
-
-  async _getStoreProduct(productId) {
-    const { products } = await this._Purchases.getProducts({ productIdentifiers: [productId] });
-    return products[0];
   }
 
   async restorePurchases() {
@@ -79,55 +60,62 @@ class IAPService {
   }
 
   _syncEntitlements(customerInfo) {
-    const entitlements = customerInfo?.entitlements?.active || {};
+    const active = customerInfo?.entitlements?.active ?? {};
 
-    // Base game
-    if (entitlements['base_game']) {
-      storageService.grantEntitlement('base_game');
+    const keyMap = {
+      base_game:    'base_game',
+      pet_hotel:    'pet_hotel',
+      extra_slot:   'extra_slot',
+      bundle_acc_1: 'bundle_acc_1',
+    };
+    for (const [entKey, storeKey] of Object.entries(keyMap)) {
+      if (active[entKey]) {
+        storageService.grantEntitlement(storeKey);
+        if (entKey === 'pet_hotel') {
+          const expiry = active[entKey].expirationDate;
+          storageService.grantEntitlement('hotelExpiry', expiry ? new Date(expiry).getTime() : null);
+        }
+      }
     }
 
-    // Raider Pass (subscription)
-    if (entitlements['raider_pass']) {
-      const expiry = entitlements['raider_pass'].expirationDate;
-      storageService.grantEntitlement('raider_pass');
-      storageService.grantEntitlement('raidPassExpiry', expiry ? new Date(expiry).getTime() : null);
-    } else {
-      storageService.grantEntitlement('raider_pass', false);
+    // Unlock accessories from bundle
+    if (storageService.hasEntitlement('bundle_acc_1')) {
+      Object.values(ACCESSORIES)
+        .filter(a => a.bundle === 'lp_acc_bundle1')
+        .forEach(a => storageService.unlockItem(a.id));
     }
 
-    // One-time entitlements
-    for (const key of ['bundle_starter', 'skin_neon_city', 'skin_cyber']) {
-      if (entitlements[key]) storageService.grantEntitlement(key);
-    }
-
-    this._notifyListeners();
+    this._notify();
   }
 
-  _grantProduct(def) {
-    if (def.entitlement) {
-      storageService.grantEntitlement(def.entitlement);
+  _grantDef(def) {
+    if (def.entitlement) storageService.grantEntitlement(def.entitlement);
+    this._grantConsumable(def);
+    // Unlock bundle accessories in dev mode
+    if (def.entitlement === 'bundle_acc_1') {
+      Object.values(ACCESSORIES)
+        .filter(a => a.bundle === 'lp_acc_bundle1')
+        .forEach(a => storageService.unlockItem(a.id));
     }
-    if (def.type === 'consumable' && def.consumableKey) {
-      storageService.addConsumable(def.consumableKey, def.qty || 1);
-    }
-    this._notifyListeners();
+    this._notify();
   }
 
-  onEntitlementChange(fn) {
-    this._listeners.push(fn);
-  }
-
-  _notifyListeners() {
-    for (const fn of this._listeners) fn();
-  }
-
-  checkRaidPassExpiry() {
-    const p = storageService.getPlayer();
-    const expiry = p.iapEntitlements.raidPassExpiry;
-    if (expiry && Date.now() > expiry) {
-      storageService.grantEntitlement('raider_pass', false);
+  _grantConsumable(def) {
+    if (def.type !== 'consumable') return;
+    if (def.consumableKey === 'gourmet_food') {
+      // Grant the gourmet food items to inventory
+      const GOURMET = ['soup', 'honey', 'crystal_apple'];
+      const perFood = Math.ceil((def.qty ?? 10) / GOURMET.length);
+      GOURMET.forEach(id => storageService.addFood(id, perFood));
+    } else if (def.consumableKey) {
+      storageService.addConsumable(def.consumableKey, def.qty ?? 1);
     }
   }
+
+  onEntitlementChange(fn) { this._listeners.push(fn); }
+  _notify() { this._listeners.forEach(fn => fn()); }
+
+  checkHotelExpiry() { storageService.checkHotelExpiry(); }
 }
 
 export const iapService = new IAPService();

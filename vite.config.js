@@ -7,6 +7,7 @@ const capacitorExternals = [
   '@capacitor/status-bar',
   '@capacitor/splash-screen',
   '@capacitor/app',
+  '@capacitor/local-notifications',
   '@revenuecat/purchases-capacitor',
 ];
 

@@ -1,4 +1,6 @@
-import { FIREBASE_CONFIG, FEATURES } from '../constants.js';
+import { FIREBASE_CONFIG } from '../constants.js';
+
+const FEATURES = { LEADERBOARD: false };
 
 /**
  * FirebaseService — analytics, leaderboards, and user sync.
