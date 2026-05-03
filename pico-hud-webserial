@@ -5,268 +5,49 @@
   <title>Pico Car HUD – WebSerial Sync</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    :root {
-      --bg: #06090f;
-      --card: #101826;
-      --card-2: #151f31;
-      --text: #e8f0ff;
-      --muted: #90a4c6;
-      --ok: #27f59f;
-      --warn: #ffd166;
-      --err: #ff5d73;
-      --accent: #57b4ff;
-      --border: rgba(140, 180, 255, 0.25);
-      --shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
-    }
-
-    * { box-sizing: border-box; }
-
+    /* CSS styles here */
     body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background:
-        radial-gradient(circle at 20% 20%, #11203a 0%, transparent 35%),
-        radial-gradient(circle at 80% 10%, #1b2b4f 0%, transparent 35%),
-        linear-gradient(180deg, #04060c, var(--bg));
-      color: var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      padding: 24px;
+      background: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
     }
-
     .hud-container {
-      width: min(680px, 100%);
-      background: linear-gradient(180deg, var(--card), var(--card-2));
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 22px;
-      box-shadow: var(--shadow);
-      text-align: left;
+      margin: auto;
+      padding: 20px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      max-width: 400px;
     }
-
-    h1 {
-      margin: 0 0 8px;
-      font-size: clamp(1.2rem, 4vw, 1.9rem);
-      letter-spacing: 0.3px;
-    }
-
-    .sub {
-      margin: 0 0 18px;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 999px;
-      margin-bottom: 14px;
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--warn);
-      box-shadow: 0 0 12px currentColor;
-    }
-
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
     button {
-      border: 1px solid var(--border);
-      background: #12213a;
-      color: var(--text);
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-weight: 600;
+      padding: 10px 20px;
+      font-size: 16px;
       cursor: pointer;
     }
-
-    button:hover { background: #183057; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    #send-box {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    input {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      color: var(--text);
-      background: #0e1728;
-    }
-
-    pre {
-      margin: 0;
-      background: #0a1220;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      padding: 12px;
-      color: #cde0ff;
-      height: 220px;
-      overflow: auto;
-      font-size: 0.88rem;
-      line-height: 1.4;
-    }
-
-    .muted { color: var(--muted); font-size: 0.86rem; margin-top: 10px; }
   </style>
 </head>
 <body>
   <div class="hud-container">
     <h1>Pico Car HUD</h1>
-    <p class="sub">Live WebSerial bridge + quick terminal controls.</p>
-
-    <div class="status">
-      <span id="dot" class="dot"></span>
-      <span id="status">Not connected</span>
-    </div>
-
-    <div class="controls">
-      <button id="connect-btn">Connect</button>
-      <button id="disconnect-btn" disabled>Disconnect</button>
-      <button id="clear-log-btn">Clear Log</button>
-    </div>
-
-    <div id="send-box">
-      <input id="command-input" type="text" placeholder="Type command to send (e.g. STATUS)" disabled />
-      <button id="send-btn" disabled>Send</button>
-    </div>
-
-    <pre id="log">[ready] Waiting for serial device...
-</pre>
-    <p class="muted">Tip: WebSerial requires a supported browser (Chrome/Edge) and a secure context (HTTPS or localhost).</p>
+    <p>Status: <span id="status">Not connected</span></p>
+    <button id="connect-btn">Connect to Pico</button>
   </div>
 
   <script>
+    // JavaScript for WebSerial connection
     const connectButton = document.getElementById('connect-btn');
-    const disconnectButton = document.getElementById('disconnect-btn');
-    const clearLogButton = document.getElementById('clear-log-btn');
-    const sendButton = document.getElementById('send-btn');
-    const commandInput = document.getElementById('command-input');
     const statusText = document.getElementById('status');
-    const dot = document.getElementById('dot');
-    const logEl = document.getElementById('log');
-
-    let port;
-    let reader;
-    let writer;
-    let readLoopActive = false;
-
-    function appendLog(line) {
-      const ts = new Date().toLocaleTimeString();
-      logEl.textContent += `[${ts}] ${line}\n`;
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    function setConnectedUI(connected) {
-      connectButton.disabled = connected;
-      disconnectButton.disabled = !connected;
-      sendButton.disabled = !connected;
-      commandInput.disabled = !connected;
-      statusText.textContent = connected ? 'Connected' : 'Not connected';
-      dot.style.color = connected ? 'var(--ok)' : 'var(--warn)';
-      dot.style.background = connected ? 'var(--ok)' : 'var(--warn)';
-    }
-
-    function assertWebSerialAvailable() {
-      if (!('serial' in navigator)) {
-        throw new Error('WebSerial API not available in this browser.');
-      }
-      if (!(window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-        throw new Error('WebSerial requires HTTPS (or localhost).');
-      }
-    }
-
-    async function disconnect() {
-      readLoopActive = false;
-      try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch {}
-      try { if (writer) writer.releaseLock(); } catch {}
-      try { if (port) await port.close(); } catch {}
-      reader = null;
-      writer = null;
-      port = null;
-      setConnectedUI(false);
-      appendLog('Disconnected.');
-    }
-
-    async function startReading() {
-      const decoder = new TextDecoderStream();
-      port.readable.pipeTo(decoder.writable).catch(() => {});
-      reader = decoder.readable.getReader();
-      readLoopActive = true;
-      while (readLoopActive) {
-        try {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) appendLog(`RX: ${value.replace(/\n/g, '\\n')}`);
-        } catch (err) {
-          appendLog(`Read error: ${err.message}`);
-          break;
-        }
-      }
-      await disconnect();
-    }
 
     connectButton.addEventListener('click', async () => {
       try {
-        assertWebSerialAvailable();
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
-        writer = port.writable.getWriter();
-        setConnectedUI(true);
-        appendLog('Connected to device at 115200 baud.');
-        startReading();
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        statusText.textContent = 'Connected!';
       } catch (error) {
-        appendLog(`Connection error: ${error.message}`);
-        statusText.textContent = 'Connection failed';
-        dot.style.background = 'var(--err)';
+        console.error('Connection error:', error);
+        statusText.textContent = 'Failed to connect.';
       }
-    });
-
-    disconnectButton.addEventListener('click', disconnect);
-
-    sendButton.addEventListener('click', async () => {
-      const cmd = commandInput.value.trim();
-      if (!cmd || !writer) return;
-      try {
-        await writer.write(new TextEncoder().encode(cmd + '\n'));
-        appendLog(`TX: ${cmd}`);
-        commandInput.value = '';
-      } catch (err) {
-        appendLog(`Send error: ${err.message}`);
-      }
-    });
-
-    commandInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendButton.click();
-    });
-
-    clearLogButton.addEventListener('click', () => {
-      logEl.textContent = '[ready] Log cleared.\n';
-    });
-
-    navigator.serial?.addEventListener?.('disconnect', () => {
-      appendLog('Device unplugged.');
-      disconnect();
     });
   </script>
 </body>
